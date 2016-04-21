@@ -10,9 +10,8 @@
 #define DBGPRINT
 
 #if defined(DBGPRINT)
-
 // needed for mallinfo
-#if defined(__PX4_POSIX)
+#if defined(__PX4_POSIX) && !defined(__PX4_DARWIN)
 #include <malloc.h>
 #endif /* __PX4_POSIX */
 
@@ -20,7 +19,6 @@
 #if defined(__PX4_DARWIN)
 #undef DBGPRINT
 #endif /* defined(__PX4_DARWIN) */
-
 #endif /* defined(DBGPRINT) */
 
 using namespace px4::logger;
