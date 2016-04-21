@@ -68,6 +68,7 @@
 #include <px4_time.h>
 #include <arch/board/board.h>
 #include <drivers/drv_hrt.h>
+#include <mathlib/mathlib.h>
 #include <systemlib/systemlib.h>
 #include <systemlib/scheduling_priorities.h>
 #include <systemlib/err.h>
@@ -323,9 +324,6 @@ int GPS::callback(GPSCallbackType type, void *data1, int data2, void *user)
 
 int GPS::pollOrRead(uint8_t *buf, size_t buf_length, int timeout)
 {
-	/* check for new messages. Note that we assume poll_or_read is called with a higher frequency
-	 * than we get new injection messages.
-	 */
 	handleInjectDataTopic();
 
 #ifndef __PX4_QURT
@@ -333,31 +331,47 @@ int GPS::pollOrRead(uint8_t *buf, size_t buf_length, int timeout)
 	/* For non QURT, use the usual polling. */
 
 	pollfd fds[1];
-	fds[0].fd = _serial_fd;
-	fds[0].events = POLLIN;
+	//Poll only for the serial data. In the same thread we also need to handle orb messages,
+	//so ideally we would poll on both, the serial fd and orb subscription. Unfortunately the
+	//two pollings use different underlying mechanisms (at least under posix), which makes this
+	//impossible. Instead we limit the maximum polling interval and regularly check for new orb
+	//messages.
+	//FIXME: add a unified poll() API
+	const int max_timeout = 100;
 
-	/* Poll for new data,  */
-	int ret = poll(fds, sizeof(fds) / sizeof(fds[0]), timeout);
+	do {
+		hrt_abstime start_time = hrt_absolute_time();
+		fds[0].fd = _serial_fd;
+		fds[0].events = POLLIN;
 
-	if (ret > 0) {
-		/* if we have new data from GPS, go handle it */
-		if (fds[0].revents & POLLIN) {
-			/*
-			 * We are here because poll says there is some data, so this
-			 * won't block even on a blocking device. But don't read immediately
-			 * by 1-2 bytes, wait for some more data to save expensive read() calls.
-			 * If more bytes are available, we'll go back to poll() again.
-			 */
-			usleep(GPS_WAIT_BEFORE_READ * 1000);
-			return ::read(_serial_fd, buf, buf_length);
+		int ret = poll(fds, sizeof(fds) / sizeof(fds[0]), math::min(max_timeout, timeout));
 
-		} else {
-			return -1;
+		if (ret > 0) {
+			/* if we have new data from GPS, go handle it */
+			if (fds[0].revents & POLLIN) {
+				/*
+				 * We are here because poll says there is some data, so this
+				 * won't block even on a blocking device. But don't read immediately
+				 * by 1-2 bytes, wait for some more data to save expensive read() calls.
+				 * If more bytes are available, we'll go back to poll() again.
+				 */
+				usleep(GPS_WAIT_BEFORE_READ * 1000);
+				ret = ::read(_serial_fd, buf, buf_length);
+
+			} else {
+				ret = -1;
+			}
 		}
 
-	} else {
-		return ret;
-	}
+		if (ret != 0) {
+			return ret;
+		}
+
+		handleInjectDataTopic();
+		timeout -= hrt_elapsed_time(&start_time) / 1000;
+	} while (timeout > 0);
+
+	return 0;
 
 #else
 	/* For QURT, just use read for now, since this doesn't block, we need to slow it down
