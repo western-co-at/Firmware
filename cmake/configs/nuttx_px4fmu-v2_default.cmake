@@ -190,6 +190,8 @@ set(config_module_list
 set(config_extra_builtin_cmds
 	serdis
 	sercon
+	msdis
+	msconn
 	)
 
 set(config_io_board
@@ -217,3 +219,18 @@ set_target_properties(serdis PROPERTIES
 	MAIN "serdis"
 	STACK_MAIN "2048"
 	COMPILE_FLAGS "-Os")
+
+add_custom_target(msconn)
+set_target_properties(msconn PROPERTIES
+	PRIORITY "SCHED_PRIORITY_DEFAULT"
+	MAIN "msconn"
+	STACK_MAIN "2048"
+	COMPILE_FLAGS "-Os")
+
+add_custom_target(msdis)
+set_target_properties(msdis PROPERTIES
+	PRIORITY "SCHED_PRIORITY_DEFAULT"
+	MAIN "msdis"
+	STACK_MAIN "2048"
+	COMPILE_FLAGS "-Os")
+

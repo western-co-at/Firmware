@@ -41,6 +41,7 @@ px4_add_module(
 		px4fmu_spi.c
 		px4fmu_usb.c
 		px4fmu2_led.c
+		px4fmu_usbmsc.c
 	DEPENDS
 		platforms__common
 	)
